@@ -13,29 +13,16 @@ const app = express();
 
 app.use(express.json());
 
-const allowedOrigins = [
-  process.env.FRONTEND_URL, // Vercel frontend
-  "http://localhost:5173", // local dev
-];
-
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // allow requests with no origin (like Postman)
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) === -1) {
-        const msg =
-          "The CORS policy for this site does not allow access from the specified Origin.";
-        return callback(new Error(msg), false);
-      }
-      return callback(null, true);
-    },
+    origin: [
+      process.env.FRONTEND_URL,
+      "http://localhost:5173",
+      "https://frontendrepobaitusslamvouapp-wef5.vercel.app",
+    ],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
-
 app.use("", authRoutes);
 app.use("", adminRoutes);
 app.use("/", VoucherRoutes);
