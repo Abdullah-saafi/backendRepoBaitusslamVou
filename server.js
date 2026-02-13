@@ -18,7 +18,7 @@ app.use(
     origin: [
       process.env.FRONTEND_URL,
       "http://localhost:5173",
-      "https://frontendrepobaitusslamvouapp-wef5.vercel.app",
+      "https://frontendrepobaitusslamvouapp-88ep.vercel.app",
     ],
     credentials: true,
   }),
