@@ -40,7 +40,11 @@ export const createLabTech = async (req, res) => {
  */
 export const getLabTechs = async (req, res) => {
   try {
-    const labTechs = await User.find({ role: "lab_tech" }).select("-password");
+    const labTechs = await User.find({
+      role: "lab_tech",
+      isDeleted: false,
+    }).select("-password");
+
     res.status(200).json(labTechs);
   } catch (error) {
     console.error("Get Lab Techs Error:", error);
@@ -48,9 +52,6 @@ export const getLabTechs = async (req, res) => {
   }
 };
 
-/**
- * Delete a Lab Tech by ID
- */
 export const deleteLabTech = async (req, res) => {
   try {
     const { id } = req.params;
@@ -59,13 +60,17 @@ export const deleteLabTech = async (req, res) => {
       return res.status(400).json({ message: "Invalid Lab Tech ID" });
     }
 
-    const labTech = await User.findByIdAndDelete(id);
+    const labTech = await User.findByIdAndUpdate(
+      id,
+      { isDeleted: true },
+      { new: true },
+    );
 
     if (!labTech) {
       return res.status(404).json({ message: "Lab Tech not found" });
     }
 
-    res.status(200).json({ message: "Lab Tech deleted successfully" });
+    res.status(200).json({ message: "Lab Tech hidden successfully" });
   } catch (error) {
     console.error("Delete Lab Tech Error:", error);
     res.status(500).json({ message: "Server error" });

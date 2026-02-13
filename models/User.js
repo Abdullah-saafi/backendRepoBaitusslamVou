@@ -9,6 +9,10 @@ const userSchema = new mongoose.Schema(
     branchcode: { type: Number, required: true },
     contact: { type: String, required: true },
     role: { type: String, enum: ["admin", "lab_tech"] },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true },
 );
