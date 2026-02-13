@@ -6,17 +6,40 @@ import mongoose from "mongoose";
 // Create a new voucher
 export const createVoucher = async (req, res) => {
   const {
+    voucherName,
     shopName,
     idName,
     partnerArea,
     discountType,
     specificTests,
     discountPercentage,
+    discountValue,
     expiryDate,
     totalCards,
   } = req.body;
 
   try {
+    console.log("=== CREATE VOUCHER REQUEST ===");
+    console.log(req.body);
+
+    // Validate required fields
+    if (
+      !voucherName ||
+      !shopName ||
+      !idName ||
+      !partnerArea ||
+      !discountType ||
+      !discountPercentage ||
+      !discountValue ||
+      !expiryDate ||
+      !totalCards
+    ) {
+      return res.status(400).json({
+        message: "Missing required fields",
+        received: req.body,
+      });
+    }
+
     const cards = [];
 
     for (let i = 0; i < totalCards; i++) {
@@ -32,22 +55,28 @@ export const createVoucher = async (req, res) => {
     }
 
     const voucher = new Voucher({
+      voucherName,
       shopName,
       idName,
       partnerArea,
       discountType,
       specificTests: discountType === "specific_tests" ? specificTests : [],
       discountPercentage,
+      discountValue,
       expiryDate,
       totalCards,
       cards,
     });
 
     await voucher.save();
+
+    console.log("=== VOUCHER CREATED SUCCESSFULLY ===");
+    console.log(voucher);
+
     res.status(201).json({ message: "Voucher created", voucher });
   } catch (err) {
     console.error("CREATE VOUCHER ERROR:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 
@@ -111,14 +140,16 @@ export const getCardDetails = async (req, res) => {
     if (!voucher) return res.status(404).json({ message: "Card not found" });
 
     const card = voucher.cards.find(
-      (c) => c.cardNumber === value || c.qrCode === value
+      (c) => c.cardNumber === value || c.qrCode === value,
     );
 
     res.status(200).json({
       card,
       voucher: {
+        voucherName: voucher.voucherName,
         shopName: voucher.shopName,
         discountPercentage: voucher.discountPercentage,
+        discountValue: voucher.discountValue,
         discountType: voucher.discountType,
         specificTests: voucher.specificTests,
         expiryDate: voucher.expiryDate,
@@ -143,7 +174,8 @@ export const useCard = async (req, res) => {
 
     const card = voucher.cards.find((c) => c.cardNumber === cardNumber);
 
-    if (!card) return res.status(404).json({ message: "Card not found in voucher" });
+    if (!card)
+      return res.status(404).json({ message: "Card not found in voucher" });
 
     if (card.status !== "active")
       return res.status(400).json({ message: `Card is ${card.status}` });
@@ -194,9 +226,13 @@ export const getTechReport = async (req, res) => {
             report.push({
               shopName: voucher.shopName,
               cardNumber: card.cardNumber,
-              discount: voucher.discountPercentage,
-              usedAt: card.usedAt,
+              discount:
+                voucher.discountPercentage === "percentage"
+                  ? `${voucher.discountValue}%`
+                  : `PKR ${voucher.discountValue}`,
+              discountValue: voucher.discountValue,
               discountType: voucher.discountType,
+              usedAt: card.usedAt,
             });
           }
         }
