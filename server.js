@@ -5,6 +5,7 @@ import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import VoucherRoutes from "./routes/VoucherRoutes.js";
+import path from "path";
 
 dotenv.config();
 connectDB();
@@ -12,13 +13,21 @@ connectDB();
 const app = express();
 
 app.use(express.json());
+// Allow your frontend to access static files
+app.use(
+  "/uploads",
+  cors({
+    origin: ["http://localhost:5173", "http://localhost:5174"], // add all frontend URLs
+  }),
+  express.static(path.join(path.resolve(), "uploads")),
+);
 
 app.use(
   cors({
     origin: [
       process.env.FRONTEND_URL,
       "http://localhost:5173",
-      "https://frontendrepobaitusslamvouapp-88ep.vercel.app",
+      "http://localhost:5174",
     ],
     credentials: true,
   }),

@@ -2,25 +2,61 @@
 import Voucher from "../models/Voucher.js";
 import { v4 as uuidv4 } from "uuid";
 import mongoose from "mongoose";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+// ── Multer setup ─────────────────────────────────────────────────────────────
+// Creates uploads/partners/ directory if it doesn't exist
+const uploadDir = "uploads/partners";
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) =>
+    cb(null, `${Date.now()}${path.extname(file.originalname)}`),
+});
+
+const fileFilter = (_req, file, cb) => {
+  if (file.mimetype.startsWith("image/")) cb(null, true);
+  else cb(new Error("Only image files are allowed"), false);
+};
+
+export const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 // Create a new voucher
 export const createVoucher = async (req, res) => {
-  const {
-    voucherName,
-    shopName,
-    idName,
-    partnerArea,
-    discountType,
-    specificTests,
-    discountPercentage,
-    discountValue,
-    expiryDate,
-    totalCards,
-  } = req.body;
-
   try {
     console.log("=== CREATE VOUCHER REQUEST ===");
-    console.log(req.body);
+    console.log("body:", req.body);
+    console.log("file:", req.file);
+
+    const {
+      voucherName,
+      shopName,
+      idName,
+      partnerArea,
+      discountType,
+      discountPercentage,
+      discountValue,
+      expiryDate,
+      totalCards,
+    } = req.body;
+
+    // specificTests arrives as a JSON string from FormData
+    let specificTests = [];
+    if (req.body.specificTests) {
+      try {
+        specificTests = JSON.parse(req.body.specificTests);
+      } catch {
+        specificTests = [];
+      }
+    }
 
     // Validate required fields
     if (
@@ -40,19 +76,19 @@ export const createVoucher = async (req, res) => {
       });
     }
 
+    // Generate cards
     const cards = [];
-
-    for (let i = 0; i < totalCards; i++) {
+    for (let i = 0; i < Number(totalCards); i++) {
       const cardNumber = `${idName}-${Date.now()}-${uuidv4()
         .slice(0, 4)
         .toUpperCase()}`;
-
-      cards.push({
-        cardNumber,
-        qrCode: cardNumber,
-        status: "active",
-      });
+      cards.push({ cardNumber, qrCode: cardNumber, status: "active" });
     }
+
+    // Build partner image URL if a file was uploaded
+    const partnerImageUrl = req.file
+      ? `/uploads/partners/${req.file.filename}`
+      : null;
 
     const voucher = new Voucher({
       voucherName,
@@ -62,9 +98,10 @@ export const createVoucher = async (req, res) => {
       discountType,
       specificTests: discountType === "specific_tests" ? specificTests : [],
       discountPercentage,
-      discountValue,
+      discountValue: Number(discountValue),
       expiryDate,
-      totalCards,
+      totalCards: Number(totalCards),
+      partnerImageUrl,
       cards,
     });
 
@@ -96,7 +133,6 @@ export const getVoucherCards = async (req, res) => {
   try {
     const voucher = await Voucher.findById(req.params.id);
     if (!voucher) return res.status(404).json({ message: "Voucher not found" });
-
     res.status(200).json(voucher.cards);
   } catch (err) {
     console.error("GET VOUCHER CARDS ERROR:", err);
@@ -104,11 +140,10 @@ export const getVoucherCards = async (req, res) => {
   }
 };
 
-// Delete a voucher (robust version)
+// Delete a voucher
 export const deleteVoucher = async (req, res) => {
   try {
     const { id } = req.params;
-
     console.log("DELETE REQUEST ID:", id);
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -116,9 +151,16 @@ export const deleteVoucher = async (req, res) => {
     }
 
     const voucher = await Voucher.findByIdAndDelete(id);
+    if (!voucher) return res.status(404).json({ message: "Voucher not found" });
 
-    if (!voucher) {
-      return res.status(404).json({ message: "Voucher not found" });
+    // Clean up uploaded image file from disk when voucher is deleted
+    if (voucher.partnerImageUrl) {
+      const filePath = `.${voucher.partnerImageUrl}`; // e.g. ./uploads/partners/xxx.jpg
+      if (fs.existsSync(filePath)) {
+        fs.unlink(filePath, (err) => {
+          if (err) console.error("Failed to delete image file:", err);
+        });
+      }
     }
 
     res.status(200).json({ message: "Deleted successfully" });
@@ -153,6 +195,7 @@ export const getCardDetails = async (req, res) => {
         discountType: voucher.discountType,
         specificTests: voucher.specificTests,
         expiryDate: voucher.expiryDate,
+        partnerImageUrl: voucher.partnerImageUrl,
       },
     });
   } catch (err) {
@@ -164,16 +207,13 @@ export const getCardDetails = async (req, res) => {
 // Use a card
 export const useCard = async (req, res) => {
   const { cardNumber, usedBy } = req.body;
-
   console.log("useCard body:", req.body);
 
   try {
     const voucher = await Voucher.findOne({ "cards.cardNumber": cardNumber });
-
     if (!voucher) return res.status(404).json({ message: "Card not found" });
 
     const card = voucher.cards.find((c) => c.cardNumber === cardNumber);
-
     if (!card)
       return res.status(404).json({ message: "Card not found in voucher" });
 
@@ -191,7 +231,6 @@ export const useCard = async (req, res) => {
     card.usedBy = usedBy || "Unknown";
 
     await voucher.save();
-
     res.status(200).json({ message: "Discount applied", card });
   } catch (err) {
     console.error("USE CARD ERROR:", err);
@@ -199,7 +238,7 @@ export const useCard = async (req, res) => {
   }
 };
 
-// Tech report route
+// Tech report
 export const getTechReport = async (req, res) => {
   try {
     const { techName } = req.params;
@@ -218,7 +257,6 @@ export const getTechReport = async (req, res) => {
             const start = new Date(startDate);
             const end = new Date(endDate);
             end.setHours(23, 59, 59);
-
             if (usedDate < start || usedDate > end) includeCard = false;
           }
 

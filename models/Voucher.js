@@ -42,6 +42,14 @@ const voucherSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
+    // ── Partner / card background image ──────────────────────────────────
+    // Stored as a relative path e.g. /uploads/partners/1234567890.jpg
+    // Frontend prefixes SERVER_BASE to build the full URL
+    partnerImageUrl: {
+      type: String,
+      default: null,
+    },
+    // ─────────────────────────────────────────────────────────────────────
     cards: [
       {
         cardNumber: {

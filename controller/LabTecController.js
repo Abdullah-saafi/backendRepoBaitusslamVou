@@ -52,6 +52,10 @@ export const getLabTechs = async (req, res) => {
   }
 };
 
+/**
+ * Delete Lab Tech
+ */
+
 export const deleteLabTech = async (req, res) => {
   try {
     const { id } = req.params;
