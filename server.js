@@ -24,20 +24,22 @@ app.use(
 
 app.use(
   cors({
-    origin: [
-      process.env.FRONTEND_URL,
-      "http://localhost:5173",
-      "http://localhost:5174",
-    ],
-    credentials: true,
+    origin: "*",
   }),
 );
 app.use("", authRoutes);
 app.use("", adminRoutes);
 app.use("/", VoucherRoutes);
 
-app.get("/", (req, res) => res.send("API running..."));
-
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "API is live 🚀",
+  });
+});
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () =>
   console.log(`Server running on port this PORT ${PORT}`),
