@@ -3,18 +3,23 @@ import Voucher from "../models/Voucher.js";
 import { v4 as uuidv4 } from "uuid";
 import mongoose from "mongoose";
 import multer from "multer";
-import path from "path";
-import fs from "fs";
+import { v2 as cloudinary } from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
 
-// ── Multer setup ─────────────────────────────────────────────────────────────
-// Creates uploads/partners/ directory if it doesn't exist
-const uploadDir = "uploads/partners";
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+// ── Cloudinary setup ──────────────────────────────────────────────────────────
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) =>
-    cb(null, `${Date.now()}${path.extname(file.originalname)}`),
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "bwt-vouchers",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    transformation: [{ width: 800, crop: "limit" }],
+  },
 });
 
 const fileFilter = (_req, file, cb) => {
@@ -25,7 +30,7 @@ const fileFilter = (_req, file, cb) => {
 export const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  limits: { fileSize: 5 * 1024 * 1024 },
 });
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -48,7 +53,6 @@ export const createVoucher = async (req, res) => {
       totalCards,
     } = req.body;
 
-    // specificTests arrives as a JSON string from FormData
     let specificTests = [];
     if (req.body.specificTests) {
       try {
@@ -58,7 +62,6 @@ export const createVoucher = async (req, res) => {
       }
     }
 
-    // Validate required fields
     if (
       !voucherName ||
       !shopName ||
@@ -76,7 +79,6 @@ export const createVoucher = async (req, res) => {
       });
     }
 
-    // Generate cards
     const cards = [];
     for (let i = 0; i < Number(totalCards); i++) {
       const cardNumber = `${idName}-${Date.now()}-${uuidv4()
@@ -85,10 +87,8 @@ export const createVoucher = async (req, res) => {
       cards.push({ cardNumber, qrCode: cardNumber, status: "active" });
     }
 
-    // Build partner image URL if a file was uploaded
-    const partnerImageUrl = req.file
-      ? `/uploads/partners/${req.file.filename}`
-      : null;
+    // ✅ Cloudinary returns full URL in req.file.path
+    const partnerImageUrl = req.file ? req.file.path : null;
 
     const voucher = new Voucher({
       voucherName,
@@ -108,8 +108,6 @@ export const createVoucher = async (req, res) => {
     await voucher.save();
 
     console.log("=== VOUCHER CREATED SUCCESSFULLY ===");
-    console.log(voucher);
-
     res.status(201).json({ message: "Voucher created", voucher });
   } catch (err) {
     console.error("CREATE VOUCHER ERROR:", err);
@@ -153,13 +151,16 @@ export const deleteVoucher = async (req, res) => {
     const voucher = await Voucher.findByIdAndDelete(id);
     if (!voucher) return res.status(404).json({ message: "Voucher not found" });
 
-    // Clean up uploaded image file from disk when voucher is deleted
+    // ✅ Delete image from Cloudinary when voucher is deleted
     if (voucher.partnerImageUrl) {
-      const filePath = `.${voucher.partnerImageUrl}`; // e.g. ./uploads/partners/xxx.jpg
-      if (fs.existsSync(filePath)) {
-        fs.unlink(filePath, (err) => {
-          if (err) console.error("Failed to delete image file:", err);
-        });
+      try {
+        // Extract public_id from Cloudinary URL
+        const urlParts = voucher.partnerImageUrl.split("/");
+        const filename = urlParts[urlParts.length - 1].split(".")[0];
+        const publicId = `voucher-partners/${filename}`;
+        await cloudinary.uploader.destroy(publicId);
+      } catch (err) {
+        console.error("Failed to delete image from Cloudinary:", err);
       }
     }
 
